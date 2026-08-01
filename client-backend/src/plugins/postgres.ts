@@ -12,6 +12,8 @@ declare module 'fastify' {
 const postgresPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.decorate('db', pool);
 
+  
+
   fastify.addHook('onClose', async (instance) => {
     instance.log.info('Closing database pool...');
     await pool.end();

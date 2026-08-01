@@ -17,6 +17,8 @@ export async function buildApp(fastify: FastifyInstance): Promise<FastifyInstanc
   // 2. Register API routing
   await fastify.register(router);
 
+ 
+
   // 3. Global error handling matching standard error response envelope
   fastify.setErrorHandler((error: any, request, reply) => {
     // Handle validation errors from Fastify schemas

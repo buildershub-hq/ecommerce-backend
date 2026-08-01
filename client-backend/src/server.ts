@@ -1,10 +1,17 @@
 import Fastify from 'fastify';
+import ajvErrors from 'ajv-errors';
 import { env } from './config/env';
 import { buildApp } from './app';
 
 const fastify = Fastify({
   logger: {
     level: env.NODE_ENV === 'development' ? 'debug' : 'info',
+  },
+  ajv: {
+    customOptions: {
+      allErrors: true,
+    },
+    plugins: [ajvErrors as any],
   },
 });
 
