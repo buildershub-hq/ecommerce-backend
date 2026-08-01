@@ -191,6 +191,9 @@ export class AuthRepository {
 
   // Helper to ensure tenant ID is set in the session (useful for row-level security)
   async setSessionTenantId(client: PoolClient, tenantId: string): Promise<void> {
-    await client.query(`SET LOCAL app.current_tenant_id = $1`, [tenantId]);
+    // SET LOCAL does not support parameterized values ($1) in PostgreSQL.
+    // UUIDs are safe to interpolate directly (hex chars + hyphens only).
+    await client.query(`SET LOCAL "app.current_tenant_id" = '${tenantId}'`);
   }
+
 }
