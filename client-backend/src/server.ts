@@ -1,23 +1,27 @@
-import Fastify from 'fastify'
+import Fastify from 'fastify';
+import { env } from './config/env';
+import { buildApp } from './app';
 
 const fastify = Fastify({
-  logger: true
-})
+  logger: {
+    level: env.NODE_ENV === 'development' ? 'debug' : 'info',
+  },
+});
 
-// Declare a route
-fastify.get('/', async (request, reply) => {
-  return { hello: 'world' }
-})
-
-// Run the server!
 const start = async () => {
   try {
-    const address = await fastify.listen({ port: 3000 })
-    fastify.log.info(`Server is now listening on ${address}`)
-  } catch (err) {
-    fastify.log.error(err)
-    process.exit(1)
-  }
-}
+    // Register plugins and routes
+    await buildApp(fastify);
 
-start()
+    const address = await fastify.listen({ 
+      port: env.PORT,
+      host: '0.0.0.0'
+    });
+    fastify.log.info(`Server is now listening on ${address}`);
+  } catch (err) {
+    fastify.log.error(err);
+    process.exit(1);
+  }
+};
+
+start();
