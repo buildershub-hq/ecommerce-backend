@@ -3,3 +3,8 @@ dist/
 .env
 *.log
 bus.docx
+
+Switch to the postgres user: sudo -i -u postgres
+Open the prompt: psql
+List all databases: \l
+Connect to a specific database: \c database_name

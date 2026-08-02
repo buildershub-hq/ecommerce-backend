@@ -1,52 +1,96 @@
 import { FastifySchema } from 'fastify';
 
-// Error response structure matching readme.md
+// Shared error envelope — no required constraint so validation errors serialise cleanly
 const errorResponseSchema = {
   type: 'object',
   properties: {
     error: {
       type: 'object',
-      required: ['code', 'message'],
       properties: {
-        code: { type: 'string' },
+        code:    { type: 'string' },
         message: { type: 'string' },
-        details: { type: 'object', nullable: true },
+        details: { nullable: true },
       },
     },
   },
 };
 
+// ─── user shape returned in every success response ───────────────────────────
+const userResponseSchema = {
+  type: 'object',
+  properties: {
+    id:            { type: 'string', format: 'uuid' },
+    fullname:      { type: 'string' },
+    email:         { type: 'string' },
+    company:       { type: 'string' },
+    business_type: { type: 'string' },
+    role:          { type: 'string' },
+  },
+};
+
+// ─── tokens shape ─────────────────────────────────────────────────────────────
+const tokensResponseSchema = {
+  type: 'object',
+  properties: {
+    accessToken:  { type: 'string' },
+    refreshToken: { type: 'string' },
+  },
+};
+
+// ─── POST /signup ─────────────────────────────────────────────────────────────
 export const signupSchema: FastifySchema = {
-  description: 'Sign up a new tenant and owner user',
+  description: 'Sign up — all fields land in the users table',
   tags: ['auth'],
   body: {
     type: 'object',
-    required: ['companyName', 'slug', 'email', 'password'],
+    required: ['fullname', 'email', 'company', 'businnessType', 'password', 'agreed'],
     properties: {
-      companyName: { 
-        type: 'string', 
-        minLength: 2, 
+      fullname: {
+        type: 'string',
+        minLength: 2,
         maxLength: 255,
-        errorMessage: 'Company name must be between 2 and 255 characters'
+        errorMessage: 'Full name must be between 2 and 255 characters',
       },
-      slug: { 
-        type: 'string', 
-        minLength: 3, 
-        maxLength: 100,
-        pattern: '^[a-z0-9-]+$',
-        errorMessage: 'Slug must be alphanumeric with hyphens only'
-      },
-      industry: { type: 'string', maxLength: 100 },
-      email: { 
-        type: 'string', 
+      email: {
+        type: 'string',
         format: 'email',
-        errorMessage: 'Must be a valid email address'
+        errorMessage: 'Must be a valid email address',
       },
-      password: { 
-        type: 'string', 
+      company: {
+        type: 'string',
+        minLength: 2,
+        maxLength: 255,
+        errorMessage: 'Company name must be between 2 and 255 characters',
+      },
+      businnessType: {
+        type: 'string',
+        enum: [
+          'Importers & Exporters',
+          'Distributors',
+          'Wholesalers',
+          'Retail Stores',
+          'Supermarkets',
+          'Pharmacies',
+          'Manufacturing SME',
+          'Construction Company',
+          'Estate Developer',
+          'Agricultural Business',
+          'Logistics Company',
+          'Other',
+        ],
+        errorMessage: { enum: 'Invalid business type. Please select a valid option.' },
+      },
+      password: {
+        type: 'string',
         minLength: 8,
         pattern: '^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&#])[A-Za-z\\d@$!%*?&#]{8,}$',
-        description: 'At least 8 chars, 1 uppercase, 1 lowercase, 1 digit, 1 special character'
+        description: 'Min 8 chars, uppercase, lowercase, digit, special character',
+        errorMessage: 'Password must be at least 8 characters with uppercase, lowercase, number and special character',
+      },
+      agreed: {
+        type: 'boolean',
+        enum: [true],
+        errorMessage: { enum: 'You must agree to the terms and conditions.' },
       },
     },
   },
@@ -58,29 +102,8 @@ export const signupSchema: FastifySchema = {
         data: {
           type: 'object',
           properties: {
-            user: {
-              type: 'object',
-              properties: {
-                id: { type: 'string', format: 'uuid' },
-                email: { type: 'string' },
-                role: { type: 'string' },
-              },
-            },
-            tenant: {
-              type: 'object',
-              properties: {
-                id: { type: 'string', format: 'uuid' },
-                name: { type: 'string' },
-                slug: { type: 'string' },
-              },
-            },
-            tokens: {
-              type: 'object',
-              properties: {
-                accessToken: { type: 'string' },
-                refreshToken: { type: 'string' },
-              },
-            },
+            user:   userResponseSchema,
+            tokens: tokensResponseSchema,
           },
         },
       },
@@ -91,16 +114,21 @@ export const signupSchema: FastifySchema = {
   },
 };
 
+// ─── POST /login ──────────────────────────────────────────────────────────────
+// Accepts the full frontend auth-state object; only email + password are used.
 export const loginSchema: FastifySchema = {
-  description: 'Log in with email, password, and tenant slug',
+  description: 'Log in — only email and password are used, other fields are ignored',
   tags: ['auth'],
   body: {
     type: 'object',
-    required: ['slug', 'email', 'password'],
+    required: ['email', 'password'],
     properties: {
-      slug: { type: 'string', minLength: 3, pattern: '^[a-z0-9-]+$' },
-      email: { type: 'string', format: 'email' },
-      password: { type: 'string' },
+      fullname:     { type: 'string' },
+      email:        { type: 'string', format: 'email' },
+      company:      { type: 'string' },
+      businnessType:{ type: 'string' },
+      password:     { type: 'string' },
+      agreed:       { type: 'boolean' },
     },
   },
   response: {
@@ -111,29 +139,8 @@ export const loginSchema: FastifySchema = {
         data: {
           type: 'object',
           properties: {
-            user: {
-              type: 'object',
-              properties: {
-                id: { type: 'string', format: 'uuid' },
-                email: { type: 'string' },
-                role: { type: 'string' },
-              },
-            },
-            tenant: {
-              type: 'object',
-              properties: {
-                id: { type: 'string', format: 'uuid' },
-                name: { type: 'string' },
-                slug: { type: 'string' },
-              },
-            },
-            tokens: {
-              type: 'object',
-              properties: {
-                accessToken: { type: 'string' },
-                refreshToken: { type: 'string' },
-              },
-            },
+            user:   userResponseSchema,
+            tokens: tokensResponseSchema,
           },
         },
       },
@@ -144,8 +151,9 @@ export const loginSchema: FastifySchema = {
   },
 };
 
+// ─── POST /refresh ────────────────────────────────────────────────────────────
 export const refreshSchema: FastifySchema = {
-  description: 'Rotate access and refresh tokens using a valid refresh token',
+  description: 'Rotate access and refresh tokens',
   tags: ['auth'],
   body: {
     type: 'object',
@@ -161,15 +169,7 @@ export const refreshSchema: FastifySchema = {
         success: { type: 'boolean' },
         data: {
           type: 'object',
-          properties: {
-            tokens: {
-              type: 'object',
-              properties: {
-                accessToken: { type: 'string' },
-                refreshToken: { type: 'string' },
-              },
-            },
-          },
+          properties: { tokens: tokensResponseSchema },
         },
       },
     },
@@ -179,8 +179,9 @@ export const refreshSchema: FastifySchema = {
   },
 };
 
+// ─── POST /logout ─────────────────────────────────────────────────────────────
 export const logoutSchema: FastifySchema = {
-  description: 'Log out a user and invalidate their current refresh token',
+  description: 'Invalidate the current refresh token',
   tags: ['auth'],
   body: {
     type: 'object',
@@ -192,17 +193,16 @@ export const logoutSchema: FastifySchema = {
   response: {
     200: {
       type: 'object',
-      properties: {
-        success: { type: 'boolean' },
-      },
+      properties: { success: { type: 'boolean' } },
     },
     400: errorResponseSchema,
     500: errorResponseSchema,
   },
 };
 
+// ─── GET /me ──────────────────────────────────────────────────────────────────
 export const meSchema: FastifySchema = {
-  description: 'Get active user profile and tenant details',
+  description: 'Return the authenticated user profile',
   tags: ['auth'],
   security: [{ bearerAuth: [] }],
   response: {
@@ -210,22 +210,7 @@ export const meSchema: FastifySchema = {
       type: 'object',
       properties: {
         success: { type: 'boolean' },
-        data: {
-          type: 'object',
-          properties: {
-            id: { type: 'string', format: 'uuid' },
-            email: { type: 'string' },
-            role: { type: 'string' },
-            tenant: {
-              type: 'object',
-              properties: {
-                id: { type: 'string', format: 'uuid' },
-                name: { type: 'string' },
-                slug: { type: 'string' },
-              },
-            },
-          },
-        },
+        data:    userResponseSchema,
       },
     },
     401: errorResponseSchema,

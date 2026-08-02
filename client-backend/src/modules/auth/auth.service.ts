@@ -1,150 +1,101 @@
-import { Pool, PoolClient } from 'pg';
+import { Pool } from 'pg';
 import { AuthRepository } from './auth.repository';
 import { AuthUtils } from './auth.utils';
 import { JWTPayload, AuthResponseData } from './auth.types';
 
 export class AuthService {
-  private authRepository: AuthRepository;
-  private db: Pool;
+  private repo: AuthRepository;
+  private db:   Pool;
 
   constructor(db: Pool) {
-    this.db = db;
-    this.authRepository = new AuthRepository();
+    this.db   = db;
+    this.repo = new AuthRepository();
   }
 
-  /**
-   * Timing attack mitigation helper.
-   * Compares a dummy hash to waste similar CPU time when user is not found.
-   */
+  /** Timing-attack mitigation: wastes bcrypt CPU time when user not found */
   private async fakePasswordVerify(): Promise<void> {
     await AuthUtils.verifyPassword(
       'dummy_password',
-      '$2b$12$L7R2R7W/aW6QdCpln7c3xO29L8n4y8fM98a.1234567890123456'
+      '$2b$12$L7R2R7W/aW6QdCpln7c3xO29L8n4y8fM98a.1234567890123456',
     );
   }
 
+  // ── POST /signup ────────────────────────────────────────────────────────────
   /**
-   * Registers a new Tenant and its Owner user in a secure transaction.
+   * All five frontend fields land in a SINGLE row of the `users` table:
+   *
+   *   fullname      → users.fullname
+   *   email         → users.email
+   *   company       → users.company
+   *   businnessType → users.business_type
+   *   password      → users.password_hash  (bcrypt)
+   *   agreed        → validated only, not persisted
    */
   async signup(
-    data: { companyName: string; slug: string; industry?: string; email: string; password: string },
-    signToken: (payload: JWTPayload) => string
+    data: {
+      fullname:      string;
+      email:         string;
+      company:       string;
+      businnessType: string;
+      password:      string;
+    },
+    signToken: (payload: JWTPayload) => string,
   ): Promise<AuthResponseData> {
     const client = await this.db.connect();
     try {
       await client.query('BEGIN');
 
-      // 1. Check if tenant slug is taken
-      const existingTenant = await this.authRepository.findTenantBySlug(client, data.slug);
-      if (existingTenant) {
-        throw new Error('TENANT_SLUG_TAKEN');
+      // 1. Reject duplicate email globally
+      const existing = await this.repo.findUserByEmail(client, data.email);
+      if (existing) {
+        throw new Error('EMAIL_ALREADY_EXISTS');
       }
 
-      // 2. Create tenant
-      const tenant = await this.authRepository.createTenant(client, {
-        name: data.companyName,
-        slug: data.slug,
-        industry: data.industry,
-      });
-
-      // 3. Set the tenant ID session variable (for RLS enforcement)
-      await this.authRepository.setSessionTenantId(client, tenant.id);
-
-      // 4. Create default roles (Owner, Manager, Staff)
-      const ownerRole = await this.authRepository.createRole(client, {
-        tenant_id: tenant.id,
-        name: 'Owner',
-      });
-      await this.authRepository.createRole(client, {
-        tenant_id: tenant.id,
-        name: 'Manager',
-      });
-      await this.authRepository.createRole(client, {
-        tenant_id: tenant.id,
-        name: 'Staff',
-      });
-
-      // 5. Seed default permissions if they don't exist
-      // Since it's raw SQL, we insert standard permissions and assign them to Owner role
-      const permissionsToSeed = [
-        { key: 'users.manage', desc: 'Manage tenant users' },
-        { key: 'orders.create', desc: 'Create sales orders' },
-        { key: 'orders.read', desc: 'Read sales orders' },
-        { key: 'orders.update', desc: 'Update sales orders' },
-        { key: 'orders.delete', desc: 'Delete sales orders' },
-        { key: 'inventory.read', desc: 'View inventory levels' },
-        { key: 'inventory.adjust', desc: 'Adjust stock levels' },
-      ];
-
-      for (const perm of permissionsToSeed) {
-        // Use UPSERT for permissions to avoid duplicates since it's global
-        const permRes = await client.query(
-          `INSERT INTO permissions (key, description)
-           VALUES ($1, $2)
-           ON CONFLICT (key) DO UPDATE SET description = EXCLUDED.description
-           RETURNING id`,
-          [perm.key, perm.desc]
-        );
-        const permId = permRes.rows[0].id;
-
-        // Assign all permissions to Owner role
-        await client.query(
-          `INSERT INTO role_permissions (role_id, permission_id)
-           VALUES ($1, $2)
-           ON CONFLICT DO NOTHING`,
-          [ownerRole.id, permId]
-        );
-      }
-
-      // 6. Hash password & Create user
+      // 2. Hash password and insert the user row
       const passwordHash = await AuthUtils.hashPassword(data.password);
-      const user = await this.authRepository.createUser(client, {
-        tenant_id: tenant.id,
-        email: data.email,
+      const user = await this.repo.createUser(client, {
+        fullname:      data.fullname,
+        email:         data.email,
+        company:       data.company,
+        business_type: data.businnessType,
         password_hash: passwordHash,
+        role:          'owner',
       });
 
-      // 7. Assign Owner role to user
-      await this.authRepository.assignRoleToUser(client, {
-        user_id: user.id,
-        role_id: ownerRole.id,
-      });
+      // 3. Issue tokens
+      const accessToken = signToken({ id: user.id, role: user.role });
 
-      // 8. Generate JWT access token & secure refresh token
-      const accessToken = signToken({
-        id: user.id,
-        tenant_id: tenant.id,
-        role: 'Owner',
-      });
-
-      const rawRefreshToken = AuthUtils.generateRandomToken();
-      const refreshTokenHash = AuthUtils.hashToken(rawRefreshToken);
-      
-      // Expire in 30 days
-      const expiresAt = new Date();
+      const rawRefreshToken   = AuthUtils.generateRandomToken();
+      const refreshTokenHash  = AuthUtils.hashToken(rawRefreshToken);
+      const expiresAt         = new Date();
       expiresAt.setDate(expiresAt.getDate() + 30);
 
-      await this.authRepository.storeRefreshToken(client, {
-        user_id: user.id,
+      await this.repo.storeRefreshToken(client, {
+        user_id:    user.id,
         token_hash: refreshTokenHash,
         expires_at: expiresAt,
       });
 
-      // 9. Write audit log
-      await this.authRepository.createAuditLog(client, {
-        tenant_id: tenant.id,
+      // 4. Audit log
+      await this.repo.createAuditLog(client, {
         actor_user_id: user.id,
-        action: 'tenant.signup',
-        entity_type: 'tenant',
-        entity_id: tenant.id,
-        metadata: { email: user.email, companyName: tenant.name },
+        action:        'user.signup',
+        entity_type:   'user',
+        entity_id:     user.id,
+        metadata:      { email: user.email, company: user.company },
       });
 
       await client.query('COMMIT');
 
       return {
-        user: { id: user.id, email: user.email, role: 'Owner' },
-        tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug },
+        user: {
+          id:            user.id,
+          fullname:      user.fullname,
+          email:         user.email,
+          company:       user.company,
+          business_type: user.business_type,
+          role:          user.role,
+        },
         tokens: { accessToken, refreshToken: rawRefreshToken },
       };
     } catch (err) {
@@ -155,76 +106,62 @@ export class AuthService {
     }
   }
 
+  // ── POST /login ─────────────────────────────────────────────────────────────
   /**
-   * Authenticates a user based on tenant slug, email, and password.
+   * Only email + password are used from the frontend payload.
+   * All other fields (fullname, company, businnessType, agreed) are ignored.
    */
   async login(
-    data: { slug: string; email: string; password: string },
-    signToken: (payload: JWTPayload) => string
+    data: { email: string; password: string },
+    signToken: (payload: JWTPayload) => string,
   ): Promise<AuthResponseData> {
     const client = await this.db.connect();
     try {
-      // 1. Resolve tenant
-      const tenant = await this.authRepository.findTenantBySlug(client, data.slug);
-      if (!tenant) {
-        // Mitigation: run fake password comparison to prevent timing verification hacks
-        await this.fakePasswordVerify();
-        throw new Error('INVALID_CREDENTIALS');
-      }
-
-      if (tenant.status === 'suspended') {
-        throw new Error('TENANT_SUSPENDED');
-      }
-
-      // 2. Resolve user
-      const user = await this.authRepository.findUserByEmail(client, tenant.id, data.email);
+      // 1. Look up user
+      const user = await this.repo.findUserByEmail(client, data.email);
       if (!user || user.status === 'disabled') {
         await this.fakePasswordVerify();
         throw new Error('INVALID_CREDENTIALS');
       }
 
-      // 3. Verify password
-      const isPasswordValid = await AuthUtils.verifyPassword(data.password, user.password_hash);
-      if (!isPasswordValid) {
+      // 2. Verify password
+      const valid = await AuthUtils.verifyPassword(data.password, user.password_hash);
+      if (!valid) {
         throw new Error('INVALID_CREDENTIALS');
       }
 
-      // 4. Resolve user role
-      const userDetails = await this.authRepository.findUserById(client, user.id);
-      const roleName = userDetails?.role || 'Staff'; // fallback to Staff
+      // 3. Issue tokens
+      const accessToken = signToken({ id: user.id, role: user.role });
 
-      // 5. Generate tokens
-      const accessToken = signToken({
-        id: user.id,
-        tenant_id: tenant.id,
-        role: roleName,
-      });
-
-      const rawRefreshToken = AuthUtils.generateRandomToken();
+      const rawRefreshToken  = AuthUtils.generateRandomToken();
       const refreshTokenHash = AuthUtils.hashToken(rawRefreshToken);
-      
-      const expiresAt = new Date();
+      const expiresAt        = new Date();
       expiresAt.setDate(expiresAt.getDate() + 30);
 
-      await this.authRepository.storeRefreshToken(client, {
-        user_id: user.id,
+      await this.repo.storeRefreshToken(client, {
+        user_id:    user.id,
         token_hash: refreshTokenHash,
         expires_at: expiresAt,
       });
 
-      // 6. Write audit log
-      await this.authRepository.createAuditLog(client, {
-        tenant_id: tenant.id,
+      // 4. Audit log
+      await this.repo.createAuditLog(client, {
         actor_user_id: user.id,
-        action: 'user.login',
-        entity_type: 'user',
-        entity_id: user.id,
-        metadata: { ip: 'unknown' },
+        action:        'user.login',
+        entity_type:   'user',
+        entity_id:     user.id,
+        metadata:      { email: user.email },
       });
 
       return {
-        user: { id: user.id, email: user.email, role: roleName },
-        tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug },
+        user: {
+          id:            user.id,
+          fullname:      user.fullname,
+          email:         user.email,
+          company:       user.company,
+          business_type: user.business_type,
+          role:          user.role,
+        },
         tokens: { accessToken, refreshToken: rawRefreshToken },
       };
     } finally {
@@ -232,105 +169,74 @@ export class AuthService {
     }
   }
 
-  /**
-   * Rotates access and refresh tokens.
-   */
+  // ── POST /refresh ───────────────────────────────────────────────────────────
   async refresh(
     rawRefreshToken: string,
-    signToken: (payload: JWTPayload) => string
+    signToken: (payload: JWTPayload) => string,
   ): Promise<{ accessToken: string; refreshToken: string }> {
     const client = await this.db.connect();
     try {
-      const tokenHash = AuthUtils.hashToken(rawRefreshToken);
-      
-      // 1. Find the refresh token
-      const storedToken = await this.authRepository.findRefreshToken(client, tokenHash);
-      if (!storedToken) {
-        throw new Error('INVALID_REFRESH_TOKEN');
-      }
+      const tokenHash   = AuthUtils.hashToken(rawRefreshToken);
+      const storedToken = await this.repo.findRefreshToken(client, tokenHash);
+      if (!storedToken) throw new Error('INVALID_REFRESH_TOKEN');
 
-      // 2. Check if expired
       if (new Date() > storedToken.expires_at) {
-        await this.authRepository.deleteRefreshToken(client, tokenHash);
+        await this.repo.deleteRefreshToken(client, tokenHash);
         throw new Error('EXPIRED_REFRESH_TOKEN');
       }
 
-      // 3. Resolve user details to sign new JWT
-      const userDetails = await this.authRepository.findUserById(client, storedToken.user_id);
-      if (!userDetails || userDetails.status === 'disabled') {
-        await this.authRepository.deleteRefreshToken(client, tokenHash);
+      const user = await this.repo.findUserById(client, storedToken.user_id);
+      if (!user || user.status === 'disabled') {
+        await this.repo.deleteRefreshToken(client, tokenHash);
         throw new Error('USER_NOT_FOUND_OR_DISABLED');
       }
 
-      // 4. Delete the used refresh token (Rotation / Single-use)
-      await this.authRepository.deleteRefreshToken(client, tokenHash);
+      // Rotate — delete old, issue new
+      await this.repo.deleteRefreshToken(client, tokenHash);
 
-      // 5. Generate new access and refresh tokens
-      const newAccessToken = signToken({
-        id: userDetails.id,
-        tenant_id: userDetails.tenant_id,
-        role: userDetails.role,
-      });
-
-      const newRawRefreshToken = AuthUtils.generateRandomToken();
+      const newAccessToken      = signToken({ id: user.id, role: user.role });
+      const newRawRefreshToken  = AuthUtils.generateRandomToken();
       const newRefreshTokenHash = AuthUtils.hashToken(newRawRefreshToken);
-
-      const expiresAt = new Date();
+      const expiresAt           = new Date();
       expiresAt.setDate(expiresAt.getDate() + 30);
 
-      await this.authRepository.storeRefreshToken(client, {
-        user_id: userDetails.id,
+      await this.repo.storeRefreshToken(client, {
+        user_id:    user.id,
         token_hash: newRefreshTokenHash,
         expires_at: expiresAt,
       });
 
-      return {
-        accessToken: newAccessToken,
-        refreshToken: newRawRefreshToken,
-      };
+      return { accessToken: newAccessToken, refreshToken: newRawRefreshToken };
     } finally {
       client.release();
     }
   }
 
-  /**
-   * Invalidates a refresh token (logout).
-   */
+  // ── POST /logout ────────────────────────────────────────────────────────────
   async logout(rawRefreshToken: string): Promise<void> {
     const client = await this.db.connect();
     try {
       const tokenHash = AuthUtils.hashToken(rawRefreshToken);
-      await this.authRepository.deleteRefreshToken(client, tokenHash);
+      await this.repo.deleteRefreshToken(client, tokenHash);
     } finally {
       client.release();
     }
   }
 
-  /**
-   * Retrieves profile details of the currently authenticated user.
-   */
-  async me(userId: string): Promise<{ id: string; email: string; role: string; tenant: { id: string; name: string; slug: string } }> {
+  // ── GET /me ─────────────────────────────────────────────────────────────────
+  async me(userId: string): Promise<AuthResponseData['user']> {
     const client = await this.db.connect();
     try {
-      const userDetails = await this.authRepository.findUserById(client, userId);
-      if (!userDetails) {
-        throw new Error('USER_NOT_FOUND');
-      }
-
-      // Resolve tenant details
-      const query = 'SELECT id, name, slug FROM tenants WHERE id = $1';
-      const tenantRes = await client.query(query, [userDetails.tenant_id]);
-      const tenant = tenantRes.rows[0];
+      const user = await this.repo.findUserById(client, userId);
+      if (!user) throw new Error('USER_NOT_FOUND');
 
       return {
-        id: userDetails.id,
-        email: userDetails.email,
-        role: userDetails.role,
-        tenant: {
-          id: tenant.id,
-          name: tenant.name,
-          slug: tenant.slug,
-        },
+        id:            user.id,
+        fullname:      user.fullname,
+        email:         user.email,
+        company:       user.company,
+        business_type: user.business_type,
+        role:          user.role,
       };
     } finally {
       client.release();
