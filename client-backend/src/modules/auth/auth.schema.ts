@@ -5,6 +5,7 @@ const errorResponseSchema = {
   type: 'object',
   properties: {
     error: {
+    
       type: 'object',
       properties: {
         code:    { type: 'string' },

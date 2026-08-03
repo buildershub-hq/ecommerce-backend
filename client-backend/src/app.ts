@@ -15,15 +15,18 @@ export async function buildApp(fastify: FastifyInstance): Promise<FastifyInstanc
   await fastify.register(swaggerPlugin);
 
   // 2. Register API routing
-  await fastify.register(router);
+  // await fastify.register(router);
 
  
 
   // 3. Global error handling matching standard error response envelope
   fastify.setErrorHandler((error: any, request, reply) => {
     // Handle validation errors from Fastify schemas
+
+      console.log("code", "statusCode");
     if (error.validation) {
       return reply.status(400).send({
+     
         error: {
           code: 'VALIDATION_ERROR',
           message: 'Input validation failed.',
@@ -40,6 +43,8 @@ export async function buildApp(fastify: FastifyInstance): Promise<FastifyInstanc
     const code = error.code || 'INTERNAL_SERVER_ERROR';
     const message = statusCode === 500 ? 'An unexpected internal error occurred.' : error.message;
 
+  
+    
     return reply.status(statusCode).send({
       error: {
         code,
