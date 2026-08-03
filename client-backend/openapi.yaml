@@ -1,0 +1,1924 @@
+openapi: 3.0.3
+info:
+  title: Business Operations Platform - Client Backend API
+  description: >
+    Business-facing API for the Business Operations Platform, built with Fastify.
+    Supports tenant-scoped multi-tenancy, Row-Level Security, JWT authentication,
+    and API Key access for public endpoints.
+  version: 1.0.0
+servers:
+  - url: /api/v1
+    description: Base API v1 path
+
+security:
+  - BearerAuth: []
+
+paths:
+  # ---------------------------------------------------------------------------
+  # Auth Module
+  # ---------------------------------------------------------------------------
+  /auth/signup:
+    post:
+      tags:
+        - Auth
+      summary: Business signup
+      description: Creates tenant, subscription, and owner user. All fields land in the users table.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupRequest'
+      responses:
+        '201':
+          description: Created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/login:
+    post:
+      tags:
+        - Auth
+      summary: User login
+      description: Issues access token and refresh token.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/refresh:
+    post:
+      tags:
+        - Auth
+      summary: Refresh access token
+      description: Rotates access token using a valid refresh token.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refreshToken
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      tokens:
+                        $ref: '#/components/schemas/Tokens'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/logout:
+    post:
+      tags:
+        - Auth
+      summary: Log out user
+      description: Revokes/invalidates current refresh token.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refreshToken
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Logged out successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+
+  /auth/forgot-password:
+    post:
+      tags:
+        - Auth
+      summary: Request password reset email
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /auth/reset-password:
+    post:
+      tags:
+        - Auth
+      summary: Reset password with token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - token
+                - newPassword
+              properties:
+                token:
+                  type: string
+                newPassword:
+                  type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /auth/verify-email:
+    post:
+      tags:
+        - Auth
+      summary: Confirm email verification token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - token
+              properties:
+                token:
+                  type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /auth/mfa/enable:
+    post:
+      tags:
+        - Auth
+      summary: Enroll MFA for current user
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /auth/mfa/verify:
+    post:
+      tags:
+        - Auth
+      summary: Verify MFA code at login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - code
+                - mfaToken
+              properties:
+                code:
+                  type: string
+                mfaToken:
+                  type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /auth/me:
+    get:
+      tags:
+        - Auth
+      summary: Get current user profile
+      description: Returns current user details, tenant information, and permissions.
+      responses:
+        '200':
+          description: User info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  # ---------------------------------------------------------------------------
+  # Organization Module
+  # ---------------------------------------------------------------------------
+  /organization/profile:
+    get:
+      tags:
+        - Organization
+      summary: Get company profile
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    patch:
+      tags:
+        - Organization
+      summary: Update company profile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /branches:
+    get:
+      tags:
+        - Organization
+      summary: List branches
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Organization
+      summary: Create branch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /branches/{id}:
+    get:
+      tags:
+        - Organization
+      summary: Get branch by ID
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    patch:
+      tags:
+        - Organization
+      summary: Update branch
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    delete:
+      tags:
+        - Organization
+      summary: Delete branch
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /departments:
+    get:
+      tags:
+        - Organization
+      summary: List departments
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Organization
+      summary: Create department
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /departments/{id}:
+    get:
+      tags:
+        - Organization
+      summary: Get department by ID
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    patch:
+      tags:
+        - Organization
+      summary: Update department
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    delete:
+      tags:
+        - Organization
+      summary: Delete department
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /employees:
+    get:
+      tags:
+        - Organization
+      summary: List employees
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Organization
+      summary: Add employee
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /employees/{id}:
+    get:
+      tags:
+        - Organization
+      summary: Get employee by ID
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    patch:
+      tags:
+        - Organization
+      summary: Update employee
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    delete:
+      tags:
+        - Organization
+      summary: Delete employee
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  # ---------------------------------------------------------------------------
+  # Users, Roles & Permissions
+  # ---------------------------------------------------------------------------
+  /users:
+    get:
+      tags:
+        - Users & Permissions
+      summary: List tenant users
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Users & Permissions
+      summary: Invite user to tenant
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /users/{id}:
+    get:
+      tags:
+        - Users & Permissions
+      summary: Get user details
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    patch:
+      tags:
+        - Users & Permissions
+      summary: Update user
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    delete:
+      tags:
+        - Users & Permissions
+      summary: Delete user
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /users/{id}/resend-invite:
+    post:
+      tags:
+        - Users & Permissions
+      summary: Resend invitation email
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /roles:
+    get:
+      tags:
+        - Users & Permissions
+      summary: List roles
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Users & Permissions
+      summary: Create custom role
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /roles/{id}:
+    get:
+      tags:
+        - Users & Permissions
+      summary: Get role details
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    patch:
+      tags:
+        - Users & Permissions
+      summary: Update role
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    delete:
+      tags:
+        - Users & Permissions
+      summary: Delete role
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /permissions:
+    get:
+      tags:
+        - Users & Permissions
+      summary: List available permission keys
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /roles/{id}/permissions:
+    put:
+      tags:
+        - Users & Permissions
+      summary: Set role permissions
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  # ---------------------------------------------------------------------------
+  # Modules & Settings
+  # ---------------------------------------------------------------------------
+  /modules:
+    get:
+      tags:
+        - Modules & Settings
+      summary: List active modules for tenant
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /settings:
+    get:
+      tags:
+        - Modules & Settings
+      summary: Get tenant-level settings
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    patch:
+      tags:
+        - Modules & Settings
+      summary: Update tenant-level settings
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /feature-flags:
+    get:
+      tags:
+        - Modules & Settings
+      summary: List feature flags enabled for tenant
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  # ---------------------------------------------------------------------------
+  # Catalog (Products)
+  # ---------------------------------------------------------------------------
+  /categories:
+    get:
+      tags:
+        - Catalog
+      summary: List product categories
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Catalog
+      summary: Create category
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /categories/{id}:
+    get:
+      tags:
+        - Catalog
+      summary: Get category
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    patch:
+      tags:
+        - Catalog
+      summary: Update category
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    delete:
+      tags:
+        - Catalog
+      summary: Delete category
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /products:
+    get:
+      tags:
+        - Catalog
+      summary: List products with search/filters
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Catalog
+      summary: Create product
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /products/{id}:
+    get:
+      tags:
+        - Catalog
+      summary: Get product details
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    patch:
+      tags:
+        - Catalog
+      summary: Update product
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    delete:
+      tags:
+        - Catalog
+      summary: Delete product
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /products/{id}/variants:
+    get:
+      tags:
+        - Catalog
+      summary: List product variants
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Catalog
+      summary: Add product variant
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /variants/{id}:
+    patch:
+      tags:
+        - Catalog
+      summary: Update variant
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    delete:
+      tags:
+        - Catalog
+      summary: Delete variant
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /products/{id}/prices:
+    get:
+      tags:
+        - Catalog
+      summary: Get product price history
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Catalog
+      summary: Set new product price
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /products/{id}/images:
+    post:
+      tags:
+        - Catalog
+      summary: Add image to product
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /images/{id}:
+    delete:
+      tags:
+        - Catalog
+      summary: Delete image
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /barcodes:
+    get:
+      tags:
+        - Catalog
+      summary: List barcodes
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Catalog
+      summary: Assign barcode
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /barcodes/{code}/lookup:
+    get:
+      tags:
+        - Catalog
+      summary: Lookup product by scanned code
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  # ---------------------------------------------------------------------------
+  # Inventory
+  # ---------------------------------------------------------------------------
+  /warehouses:
+    get:
+      tags:
+        - Inventory
+      summary: List warehouses
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Inventory
+      summary: Create warehouse
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /warehouses/{id}:
+    get:
+      tags:
+        - Inventory
+      summary: Get warehouse by ID
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    patch:
+      tags:
+        - Inventory
+      summary: Update warehouse
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    delete:
+      tags:
+        - Inventory
+      summary: Delete warehouse
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /stock-levels:
+    get:
+      tags:
+        - Inventory
+      summary: List stock levels (filterable)
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /stock-levels/{productVariantId}:
+    get:
+      tags:
+        - Inventory
+      summary: Get stock levels for a product variant across warehouses
+      parameters:
+        - name: productVariantId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /stock-adjustments:
+    post:
+      tags:
+        - Inventory
+      summary: Manual stock adjustment
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /stock-transactions:
+    get:
+      tags:
+        - Inventory
+      summary: Transaction history / audit trail
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /stock-transfers:
+    get:
+      tags:
+        - Inventory
+      summary: List warehouse transfers
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Inventory
+      summary: Initiate stock transfer
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /stock-transfers/{id}:
+    patch:
+      tags:
+        - Inventory
+      summary: Update transfer status
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /low-stock-alerts:
+    get:
+      tags:
+        - Inventory
+      summary: Active low stock alerts
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  # ---------------------------------------------------------------------------
+  # Orders
+  # ---------------------------------------------------------------------------
+  /orders:
+    get:
+      tags:
+        - Orders
+      summary: List orders
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Orders
+      summary: Create order
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /orders/{id}:
+    get:
+      tags:
+        - Orders
+      summary: Get order details
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    patch:
+      tags:
+        - Orders
+      summary: Update order
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    delete:
+      tags:
+        - Orders
+      summary: Delete order
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /orders/{id}/status:
+    post:
+      tags:
+        - Orders
+      summary: Transition order status
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /orders/{id}/history:
+    get:
+      tags:
+        - Orders
+      summary: Get order status history
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /orders/{id}/deliveries:
+    post:
+      tags:
+        - Orders
+      summary: Attach delivery/tracking info
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /deliveries/{id}:
+    get:
+      tags:
+        - Orders
+      summary: Get delivery details
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    patch:
+      tags:
+        - Orders
+      summary: Update delivery
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  # ---------------------------------------------------------------------------
+  # Customers
+  # ---------------------------------------------------------------------------
+  /customers:
+    get:
+      tags:
+        - Customers
+      summary: List customers
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Customers
+      summary: Create customer
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /customers/{id}:
+    get:
+      tags:
+        - Customers
+      summary: Get customer by ID
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    patch:
+      tags:
+        - Customers
+      summary: Update customer
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    delete:
+      tags:
+        - Customers
+      summary: Delete customer
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /customers/{id}/contacts:
+    get:
+      tags:
+        - Customers
+      summary: List customer contacts
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Customers
+      summary: Add customer contact
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /customers/{id}/orders:
+    get:
+      tags:
+        - Customers
+      summary: Get customer purchase history
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /customers/{id}/balance:
+    get:
+      tags:
+        - Customers
+      summary: Get customer outstanding balance & credit limit
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  # ---------------------------------------------------------------------------
+  # Suppliers
+  # ---------------------------------------------------------------------------
+  /suppliers:
+    get:
+      tags:
+        - Suppliers
+      summary: List suppliers
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Suppliers
+      summary: Create supplier
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /suppliers/{id}:
+    get:
+      tags:
+        - Suppliers
+      summary: Get supplier by ID
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    patch:
+      tags:
+        - Suppliers
+      summary: Update supplier
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    delete:
+      tags:
+        - Suppliers
+      summary: Delete supplier
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /suppliers/{id}/contacts:
+    get:
+      tags:
+        - Suppliers
+      summary: List supplier contacts
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Suppliers
+      summary: Add supplier contact
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /suppliers/{id}/documents:
+    get:
+      tags:
+        - Suppliers
+      summary: List supplier documents
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Suppliers
+      summary: Attach document to supplier
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  # ---------------------------------------------------------------------------
+  # Procurement
+  # ---------------------------------------------------------------------------
+  /purchase-requests:
+    get:
+      tags:
+        - Procurement
+      summary: List purchase requests
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Procurement
+      summary: Create purchase request
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /purchase-requests/{id}:
+    get:
+      tags:
+        - Procurement
+      summary: Get purchase request
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    patch:
+      tags:
+        - Procurement
+      summary: Update purchase request
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    delete:
+      tags:
+        - Procurement
+      summary: Delete purchase request
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /purchase-requests/{id}/approve:
+    post:
+      tags:
+        - Procurement
+      summary: Approve purchase request
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /purchase-requests/{id}/reject:
+    post:
+      tags:
+        - Procurement
+      summary: Reject purchase request
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /purchase-orders:
+    get:
+      tags:
+        - Procurement
+      summary: List purchase orders
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Procurement
+      summary: Create purchase order
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /purchase-orders/{id}:
+    get:
+      tags:
+        - Procurement
+      summary: Get purchase order
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    patch:
+      tags:
+        - Procurement
+      summary: Update purchase order
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    delete:
+      tags:
+        - Procurement
+      summary: Delete purchase order
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /purchase-orders/{id}/send:
+    post:
+      tags:
+        - Procurement
+      summary: Send PO to supplier
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /approvals:
+    get:
+      tags:
+        - Procurement
+      summary: Generic approval trail
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  # ---------------------------------------------------------------------------
+  # Warehouse Operations
+  # ---------------------------------------------------------------------------
+  /goods-receipts:
+    get:
+      tags:
+        - Warehouse Operations
+      summary: List goods receipts
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Warehouse Operations
+      summary: Log goods receipt against PO
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /goods-receipts/{id}:
+    get:
+      tags:
+        - Warehouse Operations
+      summary: Get goods receipt
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    patch:
+      tags:
+        - Warehouse Operations
+      summary: Update goods receipt
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /pick-lists:
+    get:
+      tags:
+        - Warehouse Operations
+      summary: List pick lists
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Warehouse Operations
+      summary: Create pick list from orders
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /pick-lists/{id}:
+    patch:
+      tags:
+        - Warehouse Operations
+      summary: Update pick status
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /dispatches:
+    get:
+      tags:
+        - Warehouse Operations
+      summary: List dispatches
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Warehouse Operations
+      summary: Record a dispatch
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  # ---------------------------------------------------------------------------
+  # Documents
+  # ---------------------------------------------------------------------------
+  /documents:
+    get:
+      tags:
+        - Documents
+      summary: List documents
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Documents
+      summary: Upload document metadata
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /documents/{id}:
+    get:
+      tags:
+        - Documents
+      summary: Get document details
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    delete:
+      tags:
+        - Documents
+      summary: Remove document
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /documents/{id}/link:
+    post:
+      tags:
+        - Documents
+      summary: Link document to entity (order, PO, supplier, etc.)
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /uploads:
+    post:
+      tags:
+        - Documents
+      summary: Raw file upload
+      description: Returns a storage URL.
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  # ---------------------------------------------------------------------------
+  # Reports
+  # ---------------------------------------------------------------------------
+  /reports/sales:
+    get:
+      tags:
+        - Reports
+      summary: Sales report
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /reports/inventory:
+    get:
+      tags:
+        - Reports
+      summary: Inventory report
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /reports/customers:
+    get:
+      tags:
+        - Reports
+      summary: Customer report
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /reports/revenue:
+    get:
+      tags:
+        - Reports
+      summary: Revenue report
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /reports/expenses:
+    get:
+      tags:
+        - Reports
+      summary: Expenses report
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /report-definitions:
+    get:
+      tags:
+        - Reports
+      summary: List saved/custom report definitions
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Reports
+      summary: Create custom report definition
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /report-snapshots:
+    get:
+      tags:
+        - Reports
+      summary: List generated report snapshots/exports
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  # ---------------------------------------------------------------------------
+  # Automation
+  # ---------------------------------------------------------------------------
+  /workflow-rules:
+    get:
+      tags:
+        - Automation
+      summary: List workflow automation rules
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Automation
+      summary: Create workflow automation rule
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /workflow-rules/{id}:
+    get:
+      tags:
+        - Automation
+      summary: Get workflow rule
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    patch:
+      tags:
+        - Automation
+      summary: Update workflow rule
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    delete:
+      tags:
+        - Automation
+      summary: Delete workflow rule
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /workflow-runs:
+    get:
+      tags:
+        - Automation
+      summary: Workflow rule execution history
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  # ---------------------------------------------------------------------------
+  # Notifications
+  # ---------------------------------------------------------------------------
+  /notifications:
+    get:
+      tags:
+        - Notifications
+      summary: List current user notifications
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /notifications/{id}/read:
+    patch:
+      tags:
+        - Notifications
+      summary: Mark notification as read
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  # ---------------------------------------------------------------------------
+  # Barcode Services
+  # ---------------------------------------------------------------------------
+  /barcode-scans:
+    get:
+      tags:
+        - Barcode Services
+      summary: Scan history
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Barcode Services
+      summary: Log a barcode scan event
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  # ---------------------------------------------------------------------------
+  # AI Services
+  # ---------------------------------------------------------------------------
+  /ai/ocr/receipt:
+    post:
+      tags:
+        - AI Services
+      summary: Submit receipt image for OCR
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /ai/ocr/invoice:
+    post:
+      tags:
+        - AI Services
+      summary: Submit invoice image for OCR
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /ai/document-extraction:
+    post:
+      tags:
+        - AI Services
+      summary: Generic document data extraction
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /ai/conversations:
+    get:
+      tags:
+        - AI Services
+      summary: List AI chat conversations
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - AI Services
+      summary: Start new AI Assistant session
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /ai/conversations/{id}/messages:
+    post:
+      tags:
+        - AI Services
+      summary: Send message in AI conversation
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /ai/insights:
+    get:
+      tags:
+        - AI Services
+      summary: Operational insights & predictive analytics
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /ai/jobs/{id}:
+    get:
+      tags:
+        - AI Services
+      summary: Poll async AI job status
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  # ---------------------------------------------------------------------------
+  # Public API (API Key Auth)
+  # ---------------------------------------------------------------------------
+  /public/products:
+    get:
+      tags:
+        - Public API
+      summary: Read-only product catalog
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+
+  /public/orders:
+    get:
+      tags:
+        - Public API
+      summary: Read orders scoped to API key permissions
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericSuccess'
+    post:
+      tags:
+        - Public API
+      summary: Create order via integration
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericSuccess'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Tenant-scoped JWT Access Token
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Public API Key for external integrations
+
+  parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    SignupRequest:
+      type: object
+      required:
+        - fullname
+        - email
+        - company
+        - businnessType
+        - password
+        - agreed
+      properties:
+        fullname:
+          type: string
+          minLength: 2
+          maxLength: 255
+        email:
+          type: string
+          format: email
+        company:
+          type: string
+          minLength: 2
+          maxLength: 255
+        businnessType:
+          type: string
+          enum:
+            - Importers & Exporters
+            - Distributors
+            - Wholesalers
+            - Retail Stores
+            - Supermarkets
+            - Pharmacies
+            - Manufacturing SME
+            - Construction Company
+            - Estate Developer
+            - Agricultural Business
+            - Logistics Company
+            - Other
+        password:
+          type: string
+          minLength: 8
+          description: Min 8 chars, uppercase, lowercase, digit, special character
+        agreed:
+          type: boolean
+          enum: [true]
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        fullname:
+          type: string
+        company:
+          type: string
+        businnessType:
+          type: string
+        agreed:
+          type: boolean
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        fullname:
+          type: string
+        email:
+          type: string
+          format: email
+        company:
+          type: string
+        business_type:
+          type: string
+        role:
+          type: string
+
+    Tokens:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+
+    AuthSuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            user:
+              $ref: '#/components/schemas/User'
+            tokens:
+              $ref: '#/components/schemas/Tokens'
+
+    ErrorEnvelope:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              nullable: true
+
+  responses:
+    GenericSuccess:
+      description: Successful operation
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: true
+
+    ErrorResponse:
+      description: Error response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
