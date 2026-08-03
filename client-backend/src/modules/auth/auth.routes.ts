@@ -28,7 +28,8 @@ export async function authRoutes(fastify: FastifyInstance) {
         timeWindow: '1 minute',
       },
     },
-  }, (req, reply) => authController.login(req, reply));
+  }, (req, reply) => {authController.login(req, reply), console.log("reponse:", reply);
+  });
 
   // Refresh Token
   fastify.post('/refresh', {
