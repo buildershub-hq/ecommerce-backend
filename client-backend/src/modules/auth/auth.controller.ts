@@ -40,11 +40,16 @@ export class AuthController {
 
   // ── POST /login ─────────────────────────────────────────────────────────────
   async login(request: FastifyRequest, reply: FastifyReply) {
+         console.log(
+           "inside login",
+         );
     try {
       const signToken = (payload: JWTPayload) => request.server.jwt.sign(payload);
       const result = await this.authService.login(request.body as any, signToken);
+      
       return reply.status(200).send({ success: true, data: result });
     } catch (err: any) {
+  
       request.log.error(err);
 
       if (err.message === 'INVALID_CREDENTIALS') {
@@ -122,6 +127,7 @@ export class AuthController {
   // ── GET /me ──────────────────────────────────────────────────────────────────
   async me(request: FastifyRequest, reply: FastifyReply) {
     try {
+       
       if (!request.user) {
         return reply.status(401).send({
           error: {

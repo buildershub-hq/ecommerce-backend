@@ -15,8 +15,8 @@ export async function buildApp(fastify: FastifyInstance): Promise<FastifyInstanc
   await fastify.register(swaggerPlugin);
 
   // 2. Register API routing
-  // await fastify.register(router);
-
+  await fastify.register(router);
+ 
  
 
   // 3. Global error handling matching standard error response envelope

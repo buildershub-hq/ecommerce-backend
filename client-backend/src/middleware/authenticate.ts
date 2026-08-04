@@ -12,6 +12,7 @@ declare module '@fastify/jwt' {
 
 export async function authenticate(request: FastifyRequest, reply: FastifyReply) {
   try {
+      
     const payload = await request.jwtVerify() as { id: string; role: string };
     request.user  = { id: payload.id, role: payload.role };
   } catch {

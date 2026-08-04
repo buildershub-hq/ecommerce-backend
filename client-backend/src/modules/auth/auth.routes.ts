@@ -42,8 +42,8 @@ export async function authRoutes(fastify: FastifyInstance) {
       },
     },
     (req, reply) => {
-     
       authController.login(req, reply);
+      console.log("reply", reply);
     },
   );
 

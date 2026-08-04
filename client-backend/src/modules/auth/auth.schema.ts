@@ -120,6 +120,7 @@ export const signupSchema: FastifySchema = {
 export const loginSchema: FastifySchema = {
   description: 'Log in — only email and password are used, other fields are ignored',
   tags: ['auth'],
+  
   body: {
     type: 'object',
     required: ['email', 'password'],
@@ -132,6 +133,7 @@ export const loginSchema: FastifySchema = {
       agreed:       { type: 'boolean' },
     },
   },
+
   response: {
     200: {
       type: 'object',
