@@ -108,6 +108,8 @@ export class AuthController {
 
   // ── POST /logout ─────────────────────────────────────────────────────────────
   async logout(request: FastifyRequest, reply: FastifyReply) {
+  
+    
     try {
       const body = request.body as any;
       await this.authService.logout(body.refreshToken);
