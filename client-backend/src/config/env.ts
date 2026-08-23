@@ -13,6 +13,7 @@ export const env = {
   REFRESH_EXPIRES_IN_DAYS: parseInt(process.env.REFRESH_EXPIRES_IN_DAYS || '30', 10),
   CORS_ORIGIN: process.env.CORS_ORIGIN || '*',
   BCRYPT_ROUNDS: parseInt(process.env.BCRYPT_ROUNDS || '12', 10),
+  MFA_APP_NAME: process.env.MFA_APP_NAME || 'BusinessOpsPlatform',
 };
 
 export type Env = typeof env;

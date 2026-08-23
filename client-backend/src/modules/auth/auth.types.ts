@@ -13,6 +13,10 @@ export interface User {
   password_hash: string;
   role: string;
   status: 'active' | 'invited' | 'disabled';
+  email_verified: boolean;
+  mfa_secret: string | null;
+  mfa_enabled: boolean;
+  mfa_pending: boolean;
   created_at: Date;
   updated_at: Date;
 }
@@ -21,6 +25,7 @@ export interface User {
 export interface JWTPayload {
   id: string;
   role: string;
+  purpose?: string;
 }
 
 /** Shape returned by signup / login */
@@ -37,4 +42,22 @@ export interface AuthResponseData {
     accessToken: string;
     refreshToken: string;
   };
+  emailVerificationToken?: string;
 }
+
+/** Extended User with MFA + email verification columns */
+export interface UserWithMfa extends User {
+  email_verified: boolean;
+  mfa_secret: string | null;
+  mfa_enabled: boolean;
+  mfa_pending: boolean;
+}
+
+/** Response when MFA is required during login */
+export interface MfaRequiredResponse {
+  mfaRequired: true;
+  mfaToken: string;
+}
+
+/** Union: login can return normal tokens OR mfa-required */
+export type LoginResponseData = AuthResponseData | MfaRequiredResponse;

@@ -220,3 +220,136 @@ export const meSchema: FastifySchema = {
     500: errorResponseSchema,
   },
 };
+
+// ─── POST /forgot-password ─────────────────────────────────────────────────
+export const forgotPasswordSchema: FastifySchema = {
+  description: 'Request a password reset token',
+  tags: ['auth'],
+  body: {
+    type: 'object',
+    required: ['email'],
+    properties: {
+      email: { type: 'string', format: 'email', errorMessage: 'Must be a valid email address' },
+    },
+  },
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        data: {
+          type: 'object',
+          properties: {
+            resetToken: { type: 'string' },
+          },
+        },
+      },
+    },
+    400: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+// ─── POST /reset-password ──────────────────────────────────────────────────
+export const resetPasswordSchema: FastifySchema = {
+  description: 'Reset password using a valid reset token',
+  tags: ['auth'],
+  body: {
+    type: 'object',
+    required: ['token', 'newPassword'],
+    properties: {
+      token: { type: 'string', minLength: 64, maxLength: 64, errorMessage: 'Invalid reset token format' },
+      newPassword: {
+        type: 'string',
+        minLength: 8,
+        pattern: '^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&#])[A-Za-z\\d@$!%*?&#]{8,}$',
+        errorMessage: 'Password must be at least 8 characters with uppercase, lowercase, number and special character',
+      },
+    },
+  },
+  response: {
+    200: {
+      type: 'object',
+      properties: { success: { type: 'boolean' } },
+    },
+    400: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+// ─── POST /verify-email ────────────────────────────────────────────────────
+export const verifyEmailSchema: FastifySchema = {
+  description: 'Verify email address using a verification token',
+  tags: ['auth'],
+  body: {
+    type: 'object',
+    required: ['token'],
+    properties: {
+      token: { type: 'string', minLength: 64, maxLength: 64, errorMessage: 'Invalid verification token format' },
+    },
+  },
+  response: {
+    200: {
+      type: 'object',
+      properties: { success: { type: 'boolean' } },
+    },
+    400: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+// ─── POST /mfa/enable ──────────────────────────────────────────────────────
+export const mfaEnableSchema: FastifySchema = {
+  description: 'Initiate MFA setup — generates TOTP secret and otpauth URI',
+  tags: ['auth'],
+  security: [{ bearerAuth: [] }],
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        data: {
+          type: 'object',
+          properties: {
+            secret: { type: 'string' },
+            otpauthUri: { type: 'string' },
+          },
+        },
+      },
+    },
+    401: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+// ─── POST /mfa/verify ──────────────────────────────────────────────────────
+export const mfaVerifySchema: FastifySchema = {
+  description: 'Verify TOTP code — confirms MFA setup or completes MFA login',
+  tags: ['auth'],
+  body: {
+    type: 'object',
+    required: ['code', 'mfaToken'],
+    properties: {
+      code: { type: 'string', minLength: 6, maxLength: 6, pattern: '^\\d{6}$', errorMessage: 'MFA code must be a 6-digit number' },
+      mfaToken: { type: 'string', errorMessage: 'MFA token is required' },
+    },
+  },
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        data: {
+          type: 'object',
+          properties: {
+            mfaEnabled: { type: 'boolean' },
+            tokens: tokensResponseSchema,
+          },
+        },
+      },
+    },
+    400: errorResponseSchema,
+    401: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};

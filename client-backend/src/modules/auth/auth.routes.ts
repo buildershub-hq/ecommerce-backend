@@ -7,6 +7,11 @@ import {
   refreshSchema,
   logoutSchema,
   meSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  verifyEmailSchema,
+  mfaEnableSchema,
+  mfaVerifySchema,
 } from "./auth.schema";
 import { authenticate } from "../../middleware/authenticate";
 
@@ -73,6 +78,53 @@ export async function authRoutes(fastify: FastifyInstance) {
       preHandler: [authenticate],
     },
     (req, reply) => authController.me(req, reply),
+  );
+
+  // Forgot Password (Rate limit: 5/min)
+  fastify.post(
+    "/forgot-password",
+    {
+      schema: forgotPasswordSchema,
+      config: { rateLimit: { max: 5, timeWindow: "1 minute" } },
+    },
+    (req, reply) => authController.forgotPassword(req, reply),
+  );
+
+  // Reset Password (Rate limit: 5/min)
+  fastify.post(
+    "/reset-password",
+    {
+      schema: resetPasswordSchema,
+      config: { rateLimit: { max: 5, timeWindow: "1 minute" } },
+    },
+    (req, reply) => authController.resetPassword(req, reply),
+  );
+
+  // Verify Email
+  fastify.post(
+    "/verify-email",
+    { schema: verifyEmailSchema },
+    (req, reply) => authController.verifyEmail(req, reply),
+  );
+
+  // MFA Enable (JWT authenticated)
+  fastify.post(
+    "/mfa/enable",
+    {
+      schema: mfaEnableSchema,
+      preHandler: [authenticate],
+    },
+    (req, reply) => authController.mfaEnable(req, reply),
+  );
+
+  // MFA Verify (Rate limit: 5/min)
+  fastify.post(
+    "/mfa/verify",
+    {
+      schema: mfaVerifySchema,
+      config: { rateLimit: { max: 5, timeWindow: "1 minute" } },
+    },
+    (req, reply) => authController.mfaVerify(req, reply),
   );
 }
 
